@@ -100,6 +100,7 @@ def register_all_frames(frames, reference_index=0, verbose=True):
         print(f"✓ Registered all {len(frames)} frames")
     
     return registered
+
 def compute_rigid_transform(reference_frame, current_frame, max_features=5000):
     """
     Compute rigid transform (rotation + translation) between two frames
@@ -159,6 +160,46 @@ def warp_frame_affine(frame, matrix):
         borderValue=0
     )
     return warped
+
+def apply_circular_crop(frame, radius_factor=1.0):
+    """
+    Apply a circular mask to remove border artefacts from rigid-body rotation.
+    
+    Parameters:
+    -----------
+    frame : np.ndarray
+        The frame to crop
+    radius_factor : float
+        Scales the inscribed circle radius.
+        1.0 = inscribed circle (fits within frame)
+        <1.0 = smaller circle (more conservative)
+        >1.0 = larger circle (keeps more data but may include artefacts)
+    
+    Returns:
+    --------
+    masked_frame : np.ndarray
+        Frame with pixels outside the circle set to black
+    
+    Note:
+    -----
+    Adjust radius_factor if more peripheral tissue data is needed.
+    Lower values are safer, higher values risk border artefacts.
+    """
+    h, w = frame.shape[:2]
+    center = (w // 2, h // 2)
+    
+    # Inscribed circle radius = half the shorter dimension
+    base_radius = min(h, w) // 2
+    radius = int(base_radius * radius_factor)
+    
+    # Create circular mask
+    mask = np.zeros((h, w), dtype=np.uint8)
+    cv2.circle(mask, center, radius, 255, -1)
+    
+    # Apply mask to frame
+    masked = cv2.bitwise_and(frame, frame, mask=mask)
+    
+    return masked
 
 def save_video(frames, output_path, fps=30):
     """
