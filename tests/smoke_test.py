@@ -57,7 +57,26 @@ def test_warp_frame():
     assert warped.dtype == current.dtype, "Warped frame should have same data type as input frame"
     print("warp_frame function works correctly.")
 
+def test_register_all_frames():
+    from register_frames import register_all_frames
+    
+    video_path = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805.MP4"
+    frames = load_video(video_path)
+    
+    # Test on first 10 frames only for speed
+    subset = frames[:10]
+    registered = register_all_frames(subset, reference_index=0, verbose=True)
+    
+    print(f"Input frames: {len(subset)}")
+    print(f"Output frames: {len(registered)}")
+    print(f"First frame shape: {registered[0].shape}")
+    
+    assert len(registered) == len(subset), "Should return same number of frames"
+    assert registered[0].shape == subset[0].shape, "Shape should match"
+    print("✓ register_all_frames works correctly.")
+
 if __name__ == "__main__":
     test_load_video()
     test_optical_flow()
     test_warp_frame()
+    test_register_all_frames()
