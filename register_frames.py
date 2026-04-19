@@ -200,6 +200,29 @@ def apply_circular_crop(frame, radius_factor=1.0):
     masked = cv2.bitwise_and(frame, frame, mask=mask)
     
     return masked
+def compute_validity_mask(frame):
+    """
+    Compute a binary mask identifying valid (non-black) pixels in a frame.
+    
+    Parameters:
+    -----------
+    frame : np.ndarray
+        A warped frame where invalid regions are pure black (0,0,0)
+    
+    Returns:
+    --------
+    mask : np.ndarray
+        Binary mask (uint8) where 255 = valid pixel, 0 = invalid
+    """
+    # Convert to grayscale to check for black pixels
+    if len(frame.shape) == 3:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = frame
+    
+    # Valid pixels are anything above 0
+    mask = (gray > 0).astype(np.uint8) * 255
+    return mask
 
 def save_video(frames, output_path, fps=30):
     """
