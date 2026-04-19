@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from register_frames import load_video  
 
 def test_load_video():
-    video_path = "test_video.mp4"  # Path to a test video file
+    video_path = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805.MP4"  # Path to a test video file
     frames = load_video(video_path)
     print(f"Loaded {len(frames)} frames from the video.")
     print(f"Frame shape: {frames[0].shape}")
