@@ -29,7 +29,7 @@ def save_trial_metadata(video_path, config, notes=""):
         json.dump(metadata, f, indent=2)
     
     print(f"Metadata saved: {metadata_path}")
-    
+
 def load_video(video_path):
     """Load all frames from video file"""
 
@@ -175,6 +175,33 @@ def compute_rigid_transform(reference_frame, current_frame, max_features=5000):
         raise RuntimeError("Could not estimate transformation")
     
     return matrix
+
+def scale_transform_matrix(matrix, scale_factor):
+    """
+    Scale a 2x3 affine transformation matrix to apply at a different resolution.
+    
+    Useful when computing transforms at low resolution and applying them at
+    high resolution. The rotation/scale components stay the same; only the
+    translation components need to be rescaled.
+    
+    Parameters:
+    -----------
+    matrix : np.ndarray
+        2x3 affine matrix computed at the lower resolution
+    scale_factor : float
+        Ratio of target resolution to source resolution.
+        e.g., if matrix was computed at 0.5x and you want to apply at 1.0x,
+        scale_factor = 1.0 / 0.5 = 2.0
+    
+    Returns:
+    --------
+    scaled_matrix : np.ndarray
+        2x3 affine matrix adjusted for the new resolution
+    """
+    scaled = matrix.copy()
+    scaled[0, 2] *= scale_factor  # tx
+    scaled[1, 2] *= scale_factor  # ty
+    return scaled
 
 def smooth_transforms(matrices, window_size=5):
     """
