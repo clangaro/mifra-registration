@@ -16,5 +16,24 @@ def test_load_video():
     print("load_video function works correctly.")
     assert all(isinstance(frame, (np.ndarray, type(None))) for frame in frames), "Each frame should be a numpy array or None"
 
+def test_optical_flow():
+    from register_frames import compute_optical_flow
+
+    video_path = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805.MP4"  # Path to a test video file
+    frames = load_video(video_path)
+
+    # compute flow between first two frames
+    flow = compute_optical_flow(frames[0], frames[1])
+
+    print(f"Optical flow shape: {flow.shape}")
+    print(f"Flow type: {flow.dtype}")
+    print(f"Max motion (x): {np.max(flow[..., 0].max()):.2f} pixels")
+    print(f"Max motion (y): {np.max(flow[..., 1].max()):.2f} pixels")
+
+    assert flow.shape[:2] == frames[0].shape[:2], "Flow should have same height and width as input frames"
+    assert flow.shape[2] == 2, "Flow should have two channels (dx, dy)"
+    print("compute_optical_flow function works correctly.")
+
 if __name__ == "__main__":
-        test_load_video()
+    test_load_video()
+    test_optical_flow()
