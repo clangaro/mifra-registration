@@ -21,36 +21,37 @@ TRIAL_NOTES = "Added temporal smoothing with window size 5 to fix trembling"
 
 # Output directory (versioning is automatic)
 OUTPUT_DIR = "/Users/carolinalangaro/Desktop/mifra_registration/output-videos"
-OUTPUT_BASENAME = "MVI_6805_registered"
+OUTPUT_BASENAME = "test"
 
 
 def get_next_versioned_path(directory, basename, extension=".mp4"):
     """
     Find the next available versioned filename in a directory.
     
-    For example, if trial-1.mp4, trial-2.mp4, trial-3.mp4 exist,
-    returns the path for trial-4.mp4.
+    For example, if test-1.mp4, test-2.mp4, test-3.mp4 exist,
+    returns the path for test-4.mp4.
     """
     os.makedirs(directory, exist_ok=True)
     existing = os.listdir(directory)
     
-    # Find highest existing trial number
     max_trial = 0
+    prefix = f"{basename}-"
     for filename in existing:
-        if filename.startswith(f"{basename}-trial-") and filename.endswith(extension):
+        if filename.startswith(prefix) and filename.endswith(extension):
             try:
-                # Extract number between "-trial-" and extension
-                trial_str = filename[len(basename) + 7:-len(extension)]
+                # Extract number between "test-" and ".mp4"
+                trial_str = filename[len(prefix):-len(extension)]
                 trial_num = int(trial_str)
                 max_trial = max(max_trial, trial_num)
             except ValueError:
                 continue
     
     next_trial = max_trial + 1
-    return os.path.join(directory, f"{basename}-trial-{next_trial}{extension}")
+    return os.path.join(directory, f"{basename}-{next_trial}{extension}")
 
 
 OUTPUT_VIDEO = get_next_versioned_path(OUTPUT_DIR, OUTPUT_BASENAME)
+
 FPS = 30
 DOWNSCALE_FACTOR = 0.5
 
@@ -152,7 +153,7 @@ def main():
     cap.release()
     writer.release()
     print(f"Done! Saved {count} frames to {OUTPUT_VIDEO}")
-    
+
 # Save metadata
     config = {
         "input_video": INPUT_VIDEO,
