@@ -103,3 +103,4 @@ if __name__ == "__main__":
     test_optical_flow()
     test_warp_frame()
     test_register_all_frames()
+    test_save_video()
