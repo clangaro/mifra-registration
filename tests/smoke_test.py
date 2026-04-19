@@ -75,6 +75,29 @@ def test_register_all_frames():
     assert registered[0].shape == subset[0].shape, "Shape should match"
     print("✓ register_all_frames works correctly.")
 
+def test_save_video():
+    from register_frames import register_all_frames, save_video
+    
+    video_path = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805.MP4"
+    frames = load_video(video_path)
+    
+    # Register first 10 frames
+    subset = frames[:10]
+    registered = register_all_frames(subset, reference_index=0, verbose=False)
+    
+    # Save to test output
+    output_path = "/Users/carolinalangaro/Desktop/mifra_registration/output-videos/test_registered.mp4"
+    save_video(registered, output_path, fps=30)
+    
+    # Verify it was created
+    assert os.path.exists(output_path), "Output video should exist"
+    
+    # Reload to verify it's readable
+    reloaded = load_video(output_path)
+    print(f"Reloaded {len(reloaded)} frames from saved video")
+    assert len(reloaded) == len(registered), "Saved video should have same number of frames"
+    print("✓ save_video works correctly.")
+
 if __name__ == "__main__":
     test_load_video()
     test_optical_flow()
