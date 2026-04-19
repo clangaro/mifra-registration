@@ -14,7 +14,40 @@ from register_frames import (
 
 # Configuration
 INPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805_cut.mp4"
-OUTPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/output-videos/MVI_6805_registered.mp4"
+import os
+
+# Output directory (versioning is automatic)
+OUTPUT_DIR = "/Users/carolinalangaro/Desktop/mifra_registration/output-videos"
+OUTPUT_BASENAME = "MVI_6805_registered"
+
+
+def get_next_versioned_path(directory, basename, extension=".mp4"):
+    """
+    Find the next available versioned filename in a directory.
+    
+    For example, if trial-1.mp4, trial-2.mp4, trial-3.mp4 exist,
+    returns the path for trial-4.mp4.
+    """
+    os.makedirs(directory, exist_ok=True)
+    existing = os.listdir(directory)
+    
+    # Find highest existing trial number
+    max_trial = 0
+    for filename in existing:
+        if filename.startswith(f"{basename}-trial-") and filename.endswith(extension):
+            try:
+                # Extract number between "-trial-" and extension
+                trial_str = filename[len(basename) + 7:-len(extension)]
+                trial_num = int(trial_str)
+                max_trial = max(max_trial, trial_num)
+            except ValueError:
+                continue
+    
+    next_trial = max_trial + 1
+    return os.path.join(directory, f"{basename}-trial-{next_trial}{extension}")
+
+
+OUTPUT_VIDEO = get_next_versioned_path(OUTPUT_DIR, OUTPUT_BASENAME)
 FPS = 30
 DOWNSCALE_FACTOR = 0.5
 
