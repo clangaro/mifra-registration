@@ -147,6 +147,46 @@ def compute_rigid_transform(reference_frame, current_frame, max_features=5000):
     
     return matrix
 
+def smooth_transforms(matrices, window_size=5):
+    """
+    Smooth a sequence of 2x3 affine transformation matrices using a 
+    moving average. Reduces frame-to-frame jitter in registration.
+    
+    Parameters:
+    -----------
+    matrices : list of np.ndarray or None
+        Sequence of 2x3 affine matrices (None for failed registrations)
+    window_size : int
+        Number of frames to average over. Must be odd. Larger = smoother 
+        but slower response to real motion changes.
+    
+    Returns:
+    --------
+    smoothed : list of np.ndarray
+        Smoothed transformation matrices
+    """
+    if window_size % 2 == 0:
+        window_size += 1  # Force odd for symmetric window
+    
+    half = window_size // 2
+    n = len(matrices)
+    smoothed = []
+    
+    for i in range(n):
+        # Collect valid matrices in the window around frame i
+        window_start = max(0, i - half)
+        window_end = min(n, i + half + 1)
+        window = [m for m in matrices[window_start:window_end] if m is not None]
+        
+        if len(window) == 0:
+            # No valid matrices nearby, use identity
+            smoothed.append(np.array([[1, 0, 0], [0, 1, 0]], dtype=np.float64))
+        else:
+            # Average all matrix elements
+            avg = np.mean(window, axis=0)
+            smoothed.append(avg)
+    
+    return smoothed
 
 def warp_frame_affine(frame, matrix):
     """Apply an affine transformation matrix to warp a frame."""

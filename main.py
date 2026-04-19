@@ -11,7 +11,7 @@ from register_frames import compute_rigid_transform, warp_frame_affine, apply_ci
 INPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805_cut.mp4"
 OUTPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/output-videos/MVI_6805_registered.mp4"
 FPS = 30
-DOWNSCALE_FACTOR = 0.5
+DOWNSCALE_FACTOR = 0.5 # 1.0 = full res, <1.0 = downscale (e.g. 0.5 for half res). Adjust to speed up processing at the cost of some accuracy.
 
 # Circular crop to remove border artefacts from rotation.
 # Set APPLY_CIRCULAR_CROP = False to keep full frame (useful if peripheral tissue is needed).
