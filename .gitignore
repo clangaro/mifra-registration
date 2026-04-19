@@ -1,0 +1,20 @@
+# Data files
+data/
+*.mp4
+*.avi
+*.mov
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Outputs
+output/
+*.png
+*.jpg
+
+#Other 
+.DS_Store
+.AppleDouble
+.LSOverride
