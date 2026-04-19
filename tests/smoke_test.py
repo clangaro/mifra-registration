@@ -49,7 +49,7 @@ def test_warp_frame():
     # warp current frame back to align with reference
     warped = warp_frame(current, flow)
 
-    print(f"Original shape: {current.shape})
+    print(f"Original shape: {current.shape}")
     print(f"Warped shape: {warped.shape}")
     print(f"Warped dtype: {warped.dtype}")
 
@@ -61,4 +61,3 @@ if __name__ == "__main__":
     test_load_video()
     test_optical_flow()
     test_warp_frame()
-    
