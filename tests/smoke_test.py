@@ -1,5 +1,7 @@
 import sys 
 import os
+import numpy as np
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))                        
 
 from register_frames import load_video  
@@ -14,5 +16,5 @@ def test_load_video():
     print("load_video function works correctly.")
     assert all(isinstance(frame, (np.ndarray, type(None))) for frame in frames), "Each frame should be a numpy array or None"
 
-    if __name__ == "__main__":
+if __name__ == "__main__":
         test_load_video()
