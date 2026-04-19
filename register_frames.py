@@ -100,6 +100,65 @@ def register_all_frames(frames, reference_index=0, verbose=True):
         print(f"✓ Registered all {len(frames)} frames")
     
     return registered
+def compute_rigid_transform(reference_frame, current_frame, max_features=5000):
+    """
+    Compute rigid transform (rotation + translation) between two frames
+    using ORB feature detection and matching.
+    
+    Returns a 2x3 affine transformation matrix.
+    """
+    # Convert to grayscale
+    ref_gray = cv2.cvtColor(reference_frame, cv2.COLOR_BGR2GRAY)
+    cur_gray = cv2.cvtColor(current_frame, cv2.COLOR_BGR2GRAY)
+    
+    # Detect ORB features
+    orb = cv2.ORB_create(nfeatures=max_features)
+    kp1, des1 = orb.detectAndCompute(ref_gray, None)
+    kp2, des2 = orb.detectAndCompute(cur_gray, None)
+    
+    if des1 is None or des2 is None:
+        raise RuntimeError("No features detected in one of the frames")
+    
+    # Match features using brute-force Hamming matcher
+    matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    matches = matcher.match(des1, des2)
+    
+    # Sort by match quality (lower distance = better)
+    matches = sorted(matches, key=lambda m: m.distance)
+    
+    # Keep top 50% of matches
+    num_good = max(10, len(matches) // 2)
+    matches = matches[:num_good]
+    
+    # Extract matched point coordinates
+    ref_pts = np.float32([kp1[m.queryIdx].pt for m in matches])
+    cur_pts = np.float32([kp2[m.trainIdx].pt for m in matches])
+    
+    # Estimate rigid transform (rotation + translation, no scaling/shearing)
+    matrix, inliers = cv2.estimateAffinePartial2D(
+        cur_pts, ref_pts,
+        method=cv2.RANSAC,
+        ransacReprojThreshold=3.0
+    )
+    
+    if matrix is None:
+        raise RuntimeError("Could not estimate transformation")
+    
+    return matrix
+
+
+def warp_frame_affine(frame, matrix):
+    """Apply an affine transformation matrix to warp a frame."""
+    h, w = frame.shape[:2]
+    warped = cv2.warpAffine(
+        frame,
+        matrix,
+        (w, h),
+        flags=cv2.INTER_LINEAR,
+        borderMode=cv2.BORDER_CONSTANT,
+        borderValue=0
+    )
+    return warped
 
 def save_video(frames, output_path, fps=30):
     """
