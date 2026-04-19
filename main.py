@@ -1,38 +1,75 @@
 """
-Main script: run full registration pipeline on a video.
-Usage: python main.py
+Main script: run full registration pipeline on a video using streaming I/O.
 """
 
 import cv2
-from register_frames import load_video, register_all_frames, save_video 
+import numpy as np
+from register_frames import compute_optical_flow, warp_frame
 
-# configuration
+# Configuration
 INPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805.MP4"
-OUTPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/output-videos/registered_video.mp4"
-REFERENCE_INDEX = 0  # index of frame to use as reference for registration
+OUTPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805_registered.mp4"
 FPS = 30
-DOWNSCALE_FACTOR = 0.5  # half resolution for initial testing (set to 1.0 for full resolution)
+DOWNSCALE_FACTOR = 0.5
 
-def downscale_frames(frames, factor):
-    """Downscale frames by a given factor for faster processing."""
-    downscaled = []
-    for frame in frames:
-        h, w = frame.shape[:2]
-        new_size = (int(w * factor), int(h * factor))
-        downscaled.append(cv2.resize(frame, new_size, interpolation=cv2.INTER_AREA))
-    return downscaled
+
+def downscale_frame(frame, factor):
+    """Downscale a single frame."""
+    h, w = frame.shape[:2]
+    new_size = (int(w * factor), int(h * factor))
+    return cv2.resize(frame, new_size, interpolation=cv2.INTER_LINEAR)
+
 
 def main():
-    print(f"Loading video: {INPUT_VIDEO}")
-    frames = load_video(INPUT_VIDEO)
-    print(f"Loaded {len(frames)} frames.")
+    # Open input video
+    cap = cv2.VideoCapture(INPUT_VIDEO)
+    if not cap.isOpened():
+        raise RuntimeError(f"Cannot open video: {INPUT_VIDEO}")
+    
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f"Input video: {total_frames} frames")
+    
+    # Read the first frame as reference
+    ret, reference = cap.read()
+    if not ret:
+        raise RuntimeError("Cannot read first frame")
+    
+    if DOWNSCALE_FACTOR < 1.0:
+        reference = downscale_frame(reference, DOWNSCALE_FACTOR)
+    
+    h, w = reference.shape[:2]
+    print(f"Processing at resolution: {w}x{h}")
+    
+    # Open output video writer
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter(OUTPUT_VIDEO, fourcc, FPS, (w, h))
+    
+    # Write the reference frame first
+    writer.write(reference)
+    
+    # Process remaining frames one at a time
+    count = 1
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if DOWNSCALE_FACTOR < 1.0:
+            frame = downscale_frame(frame, DOWNSCALE_FACTOR)
+        
+        # Register this frame
+        flow = compute_optical_flow(reference, frame)
+        warped = warp_frame(frame, flow)
+        writer.write(warped)
+        
+        count += 1
+        if count % 50 == 0:
+            print(f"  Registered {count}/{total_frames} frames")
+    
+    cap.release()
+    writer.release()
+    print(f"Done! Saved {count} frames to {OUTPUT_VIDEO}")
 
-    print("Registering all frames (this may take a while)...")
-    registered_frames = register_all_frames(frames, reference_index=REFERENCE_INDEX, verbose=True)
-
-    print(f"Saving registered video to: {OUTPUT_VIDEO}")
-    save_video(registered_frames, OUTPUT_VIDEO, fps=FPS)
-    print("Done!")
 
 if __name__ == "__main__":
     main()
