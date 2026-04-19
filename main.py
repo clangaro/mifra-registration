@@ -8,8 +8,8 @@ import numpy as np
 from register_frames import compute_rigid_transform, warp_frame_affine
 
 # Configuration
-INPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805.MP4"
-OUTPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805_registered.mp4"
+INPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805_cut.mp4"
+OUTPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/output-videos/MVI_6805_registered.mp4"
 FPS = 30
 DOWNSCALE_FACTOR = 0.5
 
