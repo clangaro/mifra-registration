@@ -1,10 +1,11 @@
 """
-Main script: run full registration pipeline on a video using streaming I/O.
+Main script: run full registration pipeline on a video using streaming I/O
+and feature-based registration.
 """
 
 import cv2
 import numpy as np
-from register_frames import compute_optical_flow, warp_frame
+from register_frames import compute_rigid_transform, warp_frame_affine
 
 # Configuration
 INPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805.MP4"
@@ -49,6 +50,7 @@ def main():
     
     # Process remaining frames one at a time
     count = 1
+    failed = 0
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -57,10 +59,16 @@ def main():
         if DOWNSCALE_FACTOR < 1.0:
             frame = downscale_frame(frame, DOWNSCALE_FACTOR)
         
-        # Register this frame
-        flow = compute_optical_flow(reference, frame)
-        warped = warp_frame(frame, flow)
-        writer.write(warped)
+        # Register this frame using feature-based matching
+        try:
+            matrix = compute_rigid_transform(reference, frame)
+            warped = warp_frame_affine(frame, matrix)
+            writer.write(warped)
+        except RuntimeError as e:
+            # If registration fails, write original frame and log
+            print(f"  Warning: registration failed on frame {count}: {e}")
+            writer.write(frame)
+            failed += 1
         
         count += 1
         if count % 50 == 0:
@@ -69,6 +77,8 @@ def main():
     cap.release()
     writer.release()
     print(f"Done! Saved {count} frames to {OUTPUT_VIDEO}")
+    if failed > 0:
+        print(f"Note: {failed} frames failed registration and were left unaligned.")
 
 
 if __name__ == "__main__":
