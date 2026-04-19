@@ -1,6 +1,35 @@
 import cv2
 import numpy as np
+import json
+from datetime import datetime
 
+
+def save_trial_metadata(video_path, config, notes=""):
+    """
+    Save a JSON metadata file alongside a trial video.
+    
+    Parameters:
+    -----------
+    video_path : str
+        Path to the output video. Metadata file will be saved next to it.
+    config : dict
+        Dictionary of configuration parameters used for this trial.
+    notes : str
+        Optional free-text notes about what was changed in this trial.
+    """
+    metadata = {
+        "timestamp": datetime.now().isoformat(),
+        "video_file": os.path.basename(video_path),
+        "config": config,
+        "notes": notes,
+    }
+    
+    metadata_path = video_path.replace(".mp4", "_metadata.json")
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2)
+    
+    print(f"Metadata saved: {metadata_path}")
+    
 def load_video(video_path):
     """Load all frames from video file"""
 
