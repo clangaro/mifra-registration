@@ -57,7 +57,7 @@ DOWNSCALE_FACTOR = 0.5
 
 # Temporal smoothing to reduce trembling.
 # Higher window = smoother but slower response to real rotation changes.
-SMOOTHING_WINDOW = 5
+SMOOTHING_WINDOW = 11
 
 # Circular crop to remove border artefacts from rotation.
 APPLY_CIRCULAR_CROP = True
