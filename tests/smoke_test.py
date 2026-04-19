@@ -34,6 +34,31 @@ def test_optical_flow():
     assert flow.shape[2] == 2, "Flow should have two channels (dx, dy)"
     print("compute_optical_flow function works correctly.")
 
+def test_warp_frame():
+    from register_frames import compute_optical_flow, warp_frame
+
+    video_path = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805.MP4"  # Path to a test video file
+    frames = load_video(video_path)
+
+    reference = frames[0]
+    current = frames[1]
+
+    #compute flow from reference to current 
+    flow = compute_optical_flow(reference, current)
+
+    # warp current frame back to align with reference
+    warped = warp_frame(current, flow)
+
+    print(f"Original shape: {current.shape})
+    print(f"Warped shape: {warped.shape}")
+    print(f"Warped dtype: {warped.dtype}")
+
+    assert warped.shape == current.shape, "Warped frame should have same shape as input frame"
+    assert warped.dtype == current.dtype, "Warped frame should have same data type as input frame"
+    print("warp_frame function works correctly.")
+
 if __name__ == "__main__":
     test_load_video()
     test_optical_flow()
+    test_warp_frame()
+    
