@@ -60,5 +60,43 @@ def warp_frame(frame, flow):
         borderMode=cv2.BORDER_CONSTANT,
         borderValue=0
     )
-    
+
     return warped
+
+def register_all_frames(frames, reference_index=0, verbose=True):
+    """
+    Register all frames to a reference frame using optical flow.
+    
+    Parameters:
+    -----------
+    frames : list of np.ndarray
+        List of video frames
+    reference_index : int
+        Index of the frame to use as the static reference
+    verbose : bool
+        Print progress updates
+    
+    Returns:
+    --------
+    registered_frames : list of np.ndarray
+        Frames aligned to the reference
+    """
+    reference = frames[reference_index]
+    registered = []
+    
+    for i, frame in enumerate(frames):
+        if i == reference_index:
+            # Reference frame doesn't need warping
+            registered.append(frame)
+        else:
+            flow = compute_optical_flow(reference, frame)
+            warped = warp_frame(frame, flow)
+            registered.append(warped)
+        
+        if verbose and (i + 1) % 50 == 0:
+            print(f"  Registered {i + 1}/{len(frames)} frames")
+    
+    if verbose:
+        print(f"✓ Registered all {len(frames)} frames")
+    
+    return registered
