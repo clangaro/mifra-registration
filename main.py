@@ -16,6 +16,9 @@ from register_frames import (
 INPUT_VIDEO = "/Users/carolinalangaro/Desktop/mifra_registration/data/MVI_6805_cut.mp4"
 import os
 
+# Describe what you're testing in this trial
+TRIAL_NOTES = "Added temporal smoothing with window size 5 to fix trembling"
+
 # Output directory (versioning is automatic)
 OUTPUT_DIR = "/Users/carolinalangaro/Desktop/mifra_registration/output-videos"
 OUTPUT_BASENAME = "MVI_6805_registered"
@@ -149,7 +152,19 @@ def main():
     cap.release()
     writer.release()
     print(f"Done! Saved {count} frames to {OUTPUT_VIDEO}")
-
+    
+# Save metadata
+    config = {
+        "input_video": INPUT_VIDEO,
+        "fps": FPS,
+        "downscale_factor": DOWNSCALE_FACTOR,
+        "smoothing_window": SMOOTHING_WINDOW,
+        "apply_circular_crop": APPLY_CIRCULAR_CROP,
+        "crop_radius_factor": CROP_RADIUS_FACTOR,
+        "total_frames": count,
+        "resolution": f"{w}x{h}",
+    }
+    save_trial_metadata(OUTPUT_VIDEO, config, notes=TRIAL_NOTES)
 
 if __name__ == "__main__":
     main()
