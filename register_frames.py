@@ -100,3 +100,29 @@ def register_all_frames(frames, reference_index=0, verbose=True):
         print(f"✓ Registered all {len(frames)} frames")
     
     return registered
+
+def save_video(frames, output_path, fps=30):
+    """
+    Save a list of frames as a video file.
+    
+    Parameters:
+    -----------
+    frames : list of np.ndarray
+        Frames to save
+    output_path : str
+        Path for the output video (should end in .mp4)
+    fps : int
+        Frames per second for the output video
+    """
+    if len(frames) == 0:
+        raise ValueError("Cannot save empty frame list")
+    
+    h, w = frames[0].shape[:2]
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
+    
+    for frame in frames:
+        writer.write(frame)
+    
+    writer.release()
+    print(f"✓ Saved {len(frames)} frames to {output_path}")
