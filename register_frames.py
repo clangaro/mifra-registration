@@ -15,11 +15,3 @@ def load_video(video_path):
     cap.release()
     return frames
 
-if __name__ == "__main__":
-    video_path = "input_video.mp4"  # Path to your input video
-    frames = load_video(video_path)
-
-    print(f"Loaded {len(frames)} frames from {video_path}")
-    print(f"Frame shape: {frames[0].shape}")  # Print shape of the first frame
-
-    
