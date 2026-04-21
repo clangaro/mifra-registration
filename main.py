@@ -29,7 +29,7 @@ REGISTRATION_SCALE = 0.5   # Used for feature detection and matching (speed)
 OUTPUT_SCALE = 1.0          # Used for the final warped video (quality)
 
 # Temporal smoothing to reduce trembling
-SMOOTHING_WINDOW = 15
+SMOOTHING_WINDOW = 21
 
 # Circular crop to remove border artefacts from rotation
 APPLY_CIRCULAR_CROP = True
