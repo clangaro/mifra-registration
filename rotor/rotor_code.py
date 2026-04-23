@@ -26,8 +26,11 @@ MS1_PIN_PICO  = Pin(16, Pin.OUT)
 MS2_PIN_PICO  = Pin(17, Pin.OUT)
 
 # ===================== Mechanical / click configuration =====================
-GEAR_RATIO               = 26.47    # rotor turns per 1 stage turn (empirical)
-DEG_PER_CLICK            = 5        # stage degrees advanced per click
+GEAR_RATIO               = 8.82     # rotor turns per 1 stage turn
+                                    # empirical: 24 clicks of 5° produced one
+                                    # full stage revolution, so the previous
+                                    # 26.47 was 3× too high -> 26.47 / 3
+DEG_PER_CLICK            = 10       # stage degrees advanced per click
 FULL_STEPS_PER_ROTOR_REV = 200      # standard NEMA 17 (1.8°/step)
 CLICK_DIRECTION          = 0        # 0 or 1; flip if stage rotates wrong way
 CLICK_DELAY_US           = 1000     # step pulse half-period during a click
