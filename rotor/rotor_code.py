@@ -1,144 +1,247 @@
-#!/usr/bin/env python3
 """
-Microscope stage rotator for Raspberry Pi.
+Microscope stage controller  (Pico + A4988 + NEMA stepper)
 
-Each button press rotates the microscope STAGE by 5°, accounting for the
-gear reduction between the stepper rotor and the stage.
+Extends the existing command-based REPL with a "click" command that
+rotates the microscope stage by 10 degrees per invocation, using 1/8
+microstepping for smooth motion.
 
-Gear train:
-    rotor shaft  -->  small gear (r = 2 cm)  -->  stage gear (r = 9.5 cm)
+Calibration used for the click geometry
+---------------------------------------
+Empirical test:
+    - 30 s run, 2000 us half-pulse delay, full-step mode (1/1)
+    - That's 7500 full-steps delivered to the rotor
+    - The stage rotated 430 degrees
+    =>  full steps per stage degree = 7500 / 430 = 17.4419
+    =>  gear ratio (rotor turns per stage turn) ~= 31.4
 
-The small gear is rigidly attached to the rotor shaft and meshes directly
-with the stage's ring gear, giving a reduction ratio of 9.5 / 2 = 4.75.
-So the rotor must turn 4.75x the angle we want at the stage.
+    In 1/8 microstep mode:
+        pulses per 10 degrees of stage = 17.4419 * 8 * 10 = 1395.35
+    Tracked as a float with target-position accumulation so that
+    rounding never drifts across many clicks.
 
-Uses a target-position strategy so rounding never accumulates: we compute
-the cumulative rotor step target after N clicks and only command the
-*difference* from the steps already taken.
+Serial commands
+---------------
+    click                 - rotate the stage +10 degrees (one click)
+    click N               - perform N consecutive 10-degree clicks
+    count                 - print current click count / total stage angle
+    reset                 - zero the click counter
+    clickdir 0|1          - direction used for clicks (default 0)
 
-Hardware (default wiring, BCM numbering):
-    28BYJ-48 stepper + ULN2003 driver board
-        IN1 -> GPIO 17
-        IN2 -> GPIO 18
-        IN3 -> GPIO 27
-        IN4 -> GPIO 22
-        VCC -> 5V, GND -> GND
-    Pushbutton between GPIO 23 and GND (internal pull-up used)
-
-Run:
-    python3 stage_rotator.py
-Ctrl+C to quit.
+    (existing commands still work)
+    move <steps> <dir> <delay_us>
+    timed <dir> <delay_us> <run_ms> <pause_ms> <iterations>
+    dir 0|1
+    microstep full|half|quarter|eighth
+    sleep | wake
 """
 
 import time
-import RPi.GPIO as GPIO
+from machine import Pin
 
-# ---------- Pin configuration (BCM numbering) ----------
-COIL_PINS  = [17, 18, 27, 22]       # IN1, IN2, IN3, IN4
-BUTTON_PIN = 23
+# ------------ Pin configuration ------------
+STEP_PIN = Pin(19, Pin.OUT)
+DIR_PIN  = Pin(18, Pin.OUT)
+SLP_PIN  = Pin(20, Pin.OUT)
+MS1_PIN  = Pin(16, Pin.OUT)
+MS2_PIN  = Pin(17, Pin.OUT)
 
-# ---------- Mechanical configuration ----------
-STAGE_RADIUS_CM     = 9.5
-ROTOR_GEAR_RADIUS_CM = 2.0
-GEAR_RATIO          = STAGE_RADIUS_CM / ROTOR_GEAR_RADIUS_CM   # = 4.75
-DEGREES_PER_CLICK   = 5             # at the stage
+# ------------ Motor / mechanical constants ------------
+NEMA_FULL_STEPS_PER_REV  = 200
+FULL_STEPS_PER_DEG_STAGE = 7500.0 / 430.0      # = 17.4419  (from calibration)
+DEGREES_PER_CLICK        = 10
+CLICK_DIRECTION_DEFAULT  = 0                   # flip to 1 if stage turns wrong way
+CLICK_DELAY_US           = 500                 # per half-pulse in 1/8 mode
+                                               # -> 1 ms per pulse, click ~1.4 s
 
-# ---------- Stepper configuration ----------
-STEPS_PER_REV = 4096                 # 28BYJ-48 half-step mode (with 1:64 gearing)
-STEP_DELAY    = 0.002                # seconds between half-steps
-DIRECTION     = 1                    # flip to -1 if stage turns the wrong way
+# ------------ Runtime state ------------
+current_microstep = 1
+click_count       = 0
+stage_deg_nominal = 0.0
+click_direction   = CLICK_DIRECTION_DEFAULT
 
-# Rotor angle per stage click, in degrees -> steps (fractional, kept as float)
-ROTOR_DEG_PER_CLICK   = DEGREES_PER_CLICK * GEAR_RATIO           # 23.75°
-STEPS_PER_CLICK_FLOAT = ROTOR_DEG_PER_CLICK / 360 * STEPS_PER_REV # ~270.22
-
-# Half-step drive sequence
-HALF_STEP_SEQ = [
-    [1, 0, 0, 0],
-    [1, 1, 0, 0],
-    [0, 1, 0, 0],
-    [0, 1, 1, 0],
-    [0, 0, 1, 0],
-    [0, 0, 1, 1],
-    [0, 0, 0, 1],
-    [1, 0, 0, 1],
-]
-
-# ---------- GPIO setup ----------
-GPIO.setmode(GPIO.BCM)
-GPIO.setwarnings(False)
-for pin in COIL_PINS:
-    GPIO.setup(pin, GPIO.OUT, initial=GPIO.LOW)
-GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-# ---------- State ----------
-click_count       = 0      # stage clicks so far
-steps_taken_total = 0      # cumulative rotor half-steps actually commanded
-phase_index       = 0      # preserves coil phase across calls
+# Target-position tracking (resets when microstep changes)
+_steps_since_ref  = 0
+_stage_deg_at_ref = 0.0
 
 
-def step_motor(num_steps: int, direction: int = 1) -> None:
-    """Advance the stepper by `num_steps` half-steps in the given direction."""
-    global phase_index
-    if num_steps == 0:
+# ------------ Driver init: wake + 1/8 microstep ------------
+SLP_PIN.value(1)
+time.sleep_ms(5)
+MS1_PIN.value(1); MS2_PIN.value(1)
+current_microstep = 8
+DIR_PIN.value(click_direction)
+
+
+# ============================================================
+# Low-level motor helpers
+# ============================================================
+def pulse_steps(n_pulses, delay_us):
+    """Deliver n_pulses STEP pulses at the currently-set direction / microstep."""
+    for _ in range(n_pulses):
+        STEP_PIN.value(1)
+        time.sleep_us(delay_us)
+        STEP_PIN.value(0)
+        time.sleep_us(delay_us)
+
+
+def move_stepper(steps, direction, delay_us):
+    DIR_PIN.value(direction)
+    pulse_steps(steps, delay_us)
+
+
+def move_timed(direction, delay_us, run_time_ms, pause_time_ms, iterations):
+    DIR_PIN.value(direction)
+    for cycle in range(iterations):
+        print("Cycle {}/{}: Motor ON for {}ms".format(cycle + 1, iterations, run_time_ms))
+        start_time = time.ticks_ms()
+        steps_completed = 0
+        while time.ticks_diff(time.ticks_ms(), start_time) < run_time_ms:
+            STEP_PIN.value(1)
+            time.sleep_us(delay_us)
+            STEP_PIN.value(0)
+            time.sleep_us(delay_us)
+            steps_completed += 1
+        print("  Completed {} steps".format(steps_completed))
+        if cycle < iterations - 1:
+            print("  Motor OFF for {}ms".format(pause_time_ms))
+            time.sleep_ms(pause_time_ms)
+    print("Timed movement complete.")
+
+
+def set_microstep(mode_name):
+    """Set A4988 MS1/MS2 and reset the click target-position reference."""
+    global current_microstep, _steps_since_ref, _stage_deg_at_ref
+    table = {"full": (0, 0, 1), "half": (1, 0, 2),
+             "quarter": (0, 1, 4), "eighth": (1, 1, 8)}
+    if mode_name not in table:
+        print("Invalid microstep mode. Use full | half | quarter | eighth.")
         return
-    seq_len = len(HALF_STEP_SEQ)
-    for _ in range(abs(num_steps)):
-        phase_index = (phase_index + direction) % seq_len
-        for pin, value in zip(COIL_PINS, HALF_STEP_SEQ[phase_index]):
-            GPIO.output(pin, value)
-        time.sleep(STEP_DELAY)
-    # De-energise coils when idle
-    for pin in COIL_PINS:
-        GPIO.output(pin, GPIO.LOW)
+    ms1, ms2, factor = table[mode_name]
+    MS1_PIN.value(ms1)
+    MS2_PIN.value(ms2)
+    current_microstep = factor
+    _steps_since_ref  = 0
+    _stage_deg_at_ref = stage_deg_nominal
+    print("Microstepping set to 1/{}.".format(factor))
 
 
-def on_click() -> None:
-    """Advance the stage by one click (5°) without cumulative rounding error."""
-    global click_count, steps_taken_total
+# ============================================================
+# Click command
+# ============================================================
+def do_click(n=1):
+    """Advance the stage by n clicks of DEGREES_PER_CLICK each."""
+    global click_count, stage_deg_nominal, _steps_since_ref
 
-    click_count += 1
+    DIR_PIN.value(click_direction)
+    pulses_per_deg = FULL_STEPS_PER_DEG_STAGE * current_microstep
 
-    # Target rotor position, in steps, after this click
-    target_steps_total = round(click_count * STEPS_PER_CLICK_FLOAT)
-    steps_this_click   = target_steps_total - steps_taken_total
+    for _ in range(n):
+        click_count       += 1
+        stage_deg_nominal += DEGREES_PER_CLICK
 
-    stage_angle_total = click_count * DEGREES_PER_CLICK
-    rotor_angle_total = click_count * ROTOR_DEG_PER_CLICK
+        # Target pulses since last reference, so fractional residue never drifts
+        target_since_ref  = round((stage_deg_nominal - _stage_deg_at_ref) * pulses_per_deg)
+        pulses_this_click = target_since_ref - _steps_since_ref
 
-    print(f"Click #{click_count:>4}  |  stage +{DEGREES_PER_CLICK}° "
-          f"(total {stage_angle_total}°)  |  rotor +{steps_this_click} steps "
-          f"(total {target_steps_total}, ~{rotor_angle_total:.2f}°)")
+        pulse_steps(pulses_this_click, CLICK_DELAY_US)
+        _steps_since_ref = target_since_ref
 
-    step_motor(steps_this_click, DIRECTION)
-    steps_taken_total = target_steps_total
+        print("Click #{:>4}  |  stage +{}deg  (total {}deg)  |  +{} pulses at 1/{} step"
+              .format(click_count, DEGREES_PER_CLICK, stage_deg_nominal,
+                      pulses_this_click, current_microstep))
 
 
-def main() -> None:
-    print("Microscope stage rotator ready.")
-    print(f"Gear ratio:        {GEAR_RATIO:.3f}  (stage {STAGE_RADIUS_CM} cm / "
-          f"rotor gear {ROTOR_GEAR_RADIUS_CM} cm)")
-    print(f"Per click:         stage {DEGREES_PER_CLICK}°  -->  rotor "
-          f"{ROTOR_DEG_PER_CLICK}°  ({STEPS_PER_CLICK_FLOAT:.3f} half-steps)")
-    print("Press the button to rotate. Ctrl+C to quit.\n")
+def reset_count():
+    global click_count, stage_deg_nominal, _steps_since_ref, _stage_deg_at_ref
+    click_count       = 0
+    stage_deg_nominal = 0.0
+    _steps_since_ref  = 0
+    _stage_deg_at_ref = 0.0
+    print("Counter reset. click_count = 0, stage_deg = 0.")
 
-    last_state = GPIO.input(BUTTON_PIN)
+
+def show_count():
+    print("Clicks: {}   |   stage angle (nominal): {}deg   |   microstep: 1/{}"
+          .format(click_count, stage_deg_nominal, current_microstep))
+
+
+# ============================================================
+# REPL
+# ============================================================
+print("Stepper motor control ready.")
+print("Click commands:  'click' | 'click N' | 'count' | 'reset' | 'clickdir 0|1'")
+print("Motion:          'move <steps> <dir> <delay_us>'")
+print("                 'timed <dir> <delay_us> <run_ms> <pause_ms> <iters>'")
+print("Config:          'dir 0|1' | 'microstep full|half|quarter|eighth'")
+print("                 'sleep' | 'wake'")
+print("Default: 1/8 microstep, click direction {}, ~{} pulses per {}deg click."
+      .format(click_direction,
+              round(FULL_STEPS_PER_DEG_STAGE * 8 * DEGREES_PER_CLICK),
+              DEGREES_PER_CLICK))
+
+while True:
     try:
-        while True:
-            state = GPIO.input(BUTTON_PIN)
-            # Button to GND with pull-up: pressed == LOW. Trigger on falling edge.
-            if last_state == GPIO.HIGH and state == GPIO.LOW:
-                on_click()
-                time.sleep(0.20)          # debounce
-            last_state = state
-            time.sleep(0.01)
-    except KeyboardInterrupt:
-        total_stage_deg = click_count * DEGREES_PER_CLICK
-        print(f"\nStopped. {click_count} clicks, stage rotated {total_stage_deg}° "
-              f"total (rotor {steps_taken_total} steps).")
-    finally:
-        GPIO.cleanup()
+        command = input().strip().split()
+        if not command:
+            continue
 
+        cmd = command[0]
 
-if __name__ == "__main__":
-    main()
+        # ---- New click commands ----
+        if cmd == "click":
+            n = int(command[1]) if len(command) > 1 else 1
+            do_click(n)
+
+        elif cmd == "count":
+            show_count()
+
+        elif cmd == "reset":
+            reset_count()
+
+        elif cmd == "clickdir":
+            click_direction = int(command[1])
+            DIR_PIN.value(click_direction)
+            print("Click direction set to {}.".format(click_direction))
+
+        # ---- Existing commands ----
+        elif cmd == "move":
+            steps     = int(command[1])
+            direction = int(command[2])
+            delay_us  = int(command[3])
+            print("Moving {} steps, direction {}, delay {}us...".format(steps, direction, delay_us))
+            move_stepper(steps, direction, delay_us)
+            print("Move complete.")
+
+        elif cmd == "timed":
+            direction     = int(command[1])
+            delay_us      = int(command[2])
+            run_time_ms   = int(command[3])
+            pause_time_ms = int(command[4])
+            iterations    = int(command[5])
+            print("Starting timed movement: {} cycles of {}ms run, {}ms pause"
+                  .format(iterations, run_time_ms, pause_time_ms))
+            move_timed(direction, delay_us, run_time_ms, pause_time_ms, iterations)
+
+        elif cmd == "dir":
+            direction = int(command[1])
+            DIR_PIN.value(direction)
+            print("Direction set to {}".format(direction))
+
+        elif cmd == "sleep":
+            SLP_PIN.value(0)
+            print("Driver put into sleep mode.")
+
+        elif cmd == "wake":
+            SLP_PIN.value(1)
+            time.sleep_ms(5)
+            print("Driver woken up.")
+
+        elif cmd == "microstep":
+            set_microstep(command[1])
+
+        else:
+            print("Unknown command.")
+
+    except Exception as e:
+        print("Error: {}".format(e))
+        print("Please check command format.")
