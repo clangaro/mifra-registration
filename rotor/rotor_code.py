@@ -33,7 +33,9 @@ GEAR_RATIO               = 5.67     # rotor turns per 1 stage turn
 DEG_PER_CLICK            = 10       # stage degrees advanced per click
 FULL_STEPS_PER_ROTOR_REV = 200      # standard NEMA 17 (1.8°/step)
 CLICK_DIRECTION          = 0        # 0 or 1; flip if stage rotates wrong way
-CLICK_DELAY_US           = 1000     # step pulse half-period during a click
+CLICK_DELAY_US           = 3000     # step pulse half-period during a click
+                                    # (larger = slower; 3000 µs gives ~200 ms
+                                    # per 10° click in full-step mode)
 
 # ===================== Driver init =====================
 SLP_PIN_PICO.value(1)               # wake the A4988
@@ -153,6 +155,7 @@ def print_help():
     print("  timed <dir> <delay_us> <run_ms> <pause_ms> <iter>")
     print("  dir 0 | dir 1")
     print("  microstep full | half | quarter | eighth")
+    print("  speed <us>                             -- set click pulse delay (bigger = slower)")
     print("  sleep | wake")
     print("  help")
 
@@ -168,7 +171,6 @@ while True:
             continue
         cmd = raw.split()
         op  = cmd[0]
-
         if op == "click":
             n = int(cmd[1]) if len(cmd) > 1 else 1
             click_stage(n)
@@ -215,6 +217,17 @@ while True:
 
         elif op == "microstep":
             set_microstep(cmd[1])
+
+        elif op == "speed":
+            new_delay = int(cmd[1])
+            if new_delay < 100:
+                print("Too fast (minimum 100 µs). Ignored.")
+            else:
+                CLICK_DELAY_US = new_delay
+                print("Click delay set to {} µs (~{:.0f} ms per click at 1/{}).".format(
+                    CLICK_DELAY_US,
+                    pulses_per_click() * 2 * CLICK_DELAY_US / 1000,
+                    current_microstep))
 
         elif op == "help":
             print_help()
