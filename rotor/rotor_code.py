@@ -33,13 +33,13 @@ GEAR_RATIO               = 5.67     # rotor turns per 1 stage turn
 DEG_PER_CLICK            = 10       # stage degrees advanced per click
 FULL_STEPS_PER_ROTOR_REV = 200      # standard NEMA 17 (1.8°/step)
 CLICK_DIRECTION          = 0        # 0 or 1; flip if stage rotates wrong way
-CLICK_DELAY_US           = 3000     # step pulse half-period during a click
-                                    # (larger = slower; 3000 µs gives ~200 ms
-                                    # per 10° click in full-step mode)
+CLICK_DELAY_US           = 15000    # step pulse half-period during a click
+                                    # at full step, 32 pulses x 30 ms = ~1 s
+                                    # per 10° click. Raise for slower.
 
 # ===================== Driver init =====================
 SLP_PIN_PICO.value(1)               # wake the A4988
-MS1_PIN_PICO.value(0)               # start in full step, matching original
+MS1_PIN_PICO.value(0)               # start in full step (matches calibration)
 MS2_PIN_PICO.value(0)
 time.sleep_ms(2)                    # A4988 needs ~1 ms settle after wake
 
